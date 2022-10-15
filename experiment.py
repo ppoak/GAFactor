@@ -51,6 +51,7 @@ def evaluate(individual):
     pred = func(adj_open, adj_high, adj_low, adj_close, volume)
     if not isinstance(pred, pd.DataFrame):
         return np.nan,
+    pred = pred.sub(pred.mean(axis=1), axis=0).div(pred.std(axis=1), axis=0)
     corr = pred.corrwith(label, axis=1, method='pearson')
     return np.abs(corr.mean()),
 
