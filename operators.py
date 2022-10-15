@@ -24,7 +24,7 @@ def sqrt(a):
         if a < 0:
             a = -a
     else:
-        a = a.abs()
+        a = np.abs(a)
     return np.sqrt(a)
 
 def ssqrt(a):
@@ -35,7 +35,10 @@ def ssqrt(a):
         else:
             sign = 1
     else:
-        sign = pd.DataFrame(np.ones_like(a), index=a.index, columns=a.columns)
-        sign = sign.mask(a < 0, -1)
-        a = a.abs()
+        sign = np.ones_like(a)
+        sign[a<0] = -1
+        a = np.abs(a)
     return sign * np.sqrt(a)
+
+def square(a):
+    return a ** 2

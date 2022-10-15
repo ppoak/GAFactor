@@ -1,10 +1,13 @@
 # %%
 import random
 import operators
+import sympy as sp
 import numpy as np
 import pandas as pd
 import geppy as gep
 from deap import tools, creator, base
+from joblib import Parallel, delayed
+
 
 # %%
 adj_open = pd.read_parquet('data/raw_factor/adj_open.parquet')
@@ -15,7 +18,7 @@ volume = pd.read_parquet('data/raw_factor/volume.parquet')
 label = pd.read_parquet('data/raw_factor/label.parquet')
 
 # %%
-pset = gep.PrimitiveSet("Main", input_names=['adj_open', 'adj_high', 'adj_low', 'adj_close'])
+pset = gep.PrimitiveSet("Main", input_names=['adj_open', 'adj_high', 'adj_low', 'adj_close', 'volume'])
 pset.add_function(operators.add, 2)
 pset.add_function(operators.sub, 2)
 pset.add_function(operators.mul, 2)
@@ -30,9 +33,9 @@ creator.create('FitnessMin', base.Fitness, weights=(1,))
 creator.create('Individual', gep.Chromosome, fitness=creator.FitnessMin)
 
 # %%
-head_len = 7
+head_len = 10
 n_genes = 1
-rnc_len = 3
+rnc_len = 10
 
 # %%
 toolbox = gep.Toolbox()
@@ -45,11 +48,15 @@ toolbox.register('compile', gep.compile_, pset=pset)
 # %%
 def evaluate(individual):
     func = toolbox.compile(individual)
-    pred = func(adj_open, adj_high, adj_low, adj_close)
+    pred = func(adj_open, adj_high, adj_low, adj_close, volume)
     if not isinstance(pred, pd.DataFrame):
         return np.nan,
     corr = pred.corrwith(label, axis=1, method='pearson')
     return np.abs(corr.mean()),
+
+def async_map(func, jobs):
+    return Parallel(n_jobs=-1, backend='threading')(delayed(func)(job) for job in jobs)
+toolbox.register('map', async_map)
 
 toolbox.register('evaluate', evaluate)
 
@@ -79,8 +86,8 @@ stats.register("count", lambda x: len(x) - np.isnan(x).sum())
 
 # %%
 n_pop = 200
-n_gen = 1
-champs = 3
+n_gen = 50
+champs = 10
 pop = toolbox.population(n=n_pop)
 hof = tools.HallOfFame(champs)
 
@@ -88,4 +95,11 @@ hof = tools.HallOfFame(champs)
 pop, log = gep.gep_simple(pop, toolbox, n_generations=n_gen, n_elites=1, stats=stats, hall_of_fame=hof, verbose=True)
 
 for elite in hof:
-    print(elite.kexpressions[0])
+    print(gep.simplify(elite, symbolic_function_map={
+        "add": lambda x, y: sp.Symbol(f'{x} + {y}'),
+        "sub": lambda x, y: sp.Symbol(f'{x} - {y}'),
+        "mul": lambda x, y: sp.Symbol(f'{x} * {y}'),
+        "div": lambda x, y: sp.Symbol(f'{x} / {y}'),
+        "sqrt": lambda x: sp.Symbol(f'sqrt({x})'),
+        "ssqrt": lambda x: sp.Symbol(f'ssqrt({x})'),
+    }))
