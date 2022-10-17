@@ -1,15 +1,19 @@
-# %%
+# %% 
+
+import time
 import random
+import itertools
 import operators
-import sympy as sp
 import numpy as np
 import pandas as pd
-import geppy as gep
-from deap import tools, creator, base
 from joblib import Parallel, delayed
-
+from deap import tools, creator, base, gp, algorithms
 
 # %%
+train_start = "2022-03-01"
+train_end = "2022-05-31"
+test_start = "2022-06-01"
+test_end = "2022-08-31"
 adj_open = pd.read_parquet('data/raw_factor/adj_open.parquet')
 adj_close = pd.read_parquet('data/raw_factor/adj_close.parquet')
 adj_high = pd.read_parquet('data/raw_factor/adj_high.parquet')
@@ -18,89 +22,79 @@ volume = pd.read_parquet('data/raw_factor/volume.parquet')
 label = pd.read_parquet('data/raw_factor/label.parquet')
 
 # %%
-pset = gep.PrimitiveSet("Main", input_names=['adj_open', 'adj_high', 'adj_low', 'adj_close', 'volume'])
-pset.add_function(operators.add, 2)
-pset.add_function(operators.sub, 2)
-pset.add_function(operators.mul, 2)
-pset.add_function(operators.div, 2)
-pset.add_function(operators.sqrt, 1)
-pset.add_function(operators.ssqrt, 1)
-pset.add_rnc_terminal()
-# pset.add_ephemeral_terminal('const', lambda: random.uniform(-1, 1))
+adj_open_train = adj_open.loc[train_start:train_end]
+adj_close_train = adj_close.loc[train_start:train_end]
+adj_high_train = adj_high.loc[train_start:train_end]
+adj_low_train = adj_low.loc[train_start:train_end]
+volume_train = volume.loc[train_start:train_end]
+label_train = label.loc[train_start:train_end]
 
 # %%
-creator.create('FitnessMin', base.Fitness, weights=(1,))
-creator.create('Individual', gep.Chromosome, fitness=creator.FitnessMin)
+pset = gp.PrimitiveSetTyped("MAIN", itertools.repeat(pd.DataFrame, 5), pd.DataFrame, "ARG")
+pset.addPrimitive(operators.add, [pd.DataFrame, pd.DataFrame], pd.DataFrame)
+pset.addPrimitive(operators.sub, [pd.DataFrame, pd.DataFrame], pd.DataFrame)
+pset.addPrimitive(operators.mul, [pd.DataFrame, pd.DataFrame], pd.DataFrame)
+pset.addPrimitive(operators.div, [pd.DataFrame, pd.DataFrame], pd.DataFrame)
+pset.addEphemeralConstant("randint", lambda: random.randint(1, 10), int)
+pset.addEphemeralConstant("rand100", lambda: random.uniform(1e-2, 1), float)
+pset.renameArguments(ARG0='adj_open')
+pset.renameArguments(ARG1='adj_high')
+pset.renameArguments(ARG2='adj_low')
+pset.renameArguments(ARG3='adj_close')
+pset.renameArguments(ARG4='vol')
 
 # %%
-head_len = 10
-n_genes = 1
-rnc_len = 10
+creator.create("FitnessMax", base.Fitness, weights=(1.0,))
+creator.create("Individual", gp.PrimitiveTree, fitness=creator.FitnessMax)
 
-# %%
-toolbox = gep.Toolbox()
-toolbox.register('rnc_gen', random.uniform, a=-1, b=1)
-toolbox.register('gene_gen', gep.GeneDc, pset=pset, head_length=head_len, rnc_gen=toolbox.rnc_gen, rnc_array_length=rnc_len)
-toolbox.register('individual', creator.Individual, gene_gen=toolbox.gene_gen, n_genes=n_genes)
+toolbox = base.Toolbox()
+toolbox.register("expr", gp.genHalfAndHalf, pset=pset, min_=1, max_=2)
+toolbox.register("individual", tools.initIterate, creator.Individual, toolbox.expr)
 toolbox.register("population", tools.initRepeat, list, toolbox.individual)
-toolbox.register('compile', gep.compile_, pset=pset)
+toolbox.register("compile", gp.compile, pset=pset)
 
 # %%
+def pearson_corr(x, y):
+    res_x = x - np.nanmean(x)
+    res_y = y - np.nanmean(y)
+    return np.dot(res_x, res_y) / (np.linalg.norm(res_x) * np.linalg.norm(res_y))
+
 def evaluate(individual):
     func = toolbox.compile(individual)
     pred = func(adj_open, adj_high, adj_low, adj_close, volume)
     if not isinstance(pred, pd.DataFrame):
         return np.nan,
-    pred = pred.sub(pred.mean(axis=1), axis=0).div(pred.std(axis=1), axis=0)
-    corr = pred.corrwith(label, axis=1, method='pearson')
-    return np.abs(corr.mean()),
+    corrs = pred.corrwith(label, axis=1)
+    return np.abs(corrs.mean()),
 
+toolbox.register("evaluate", evaluate)
+toolbox.register("select", tools.selTournament, tournsize=3)
+toolbox.register("mate", gp.cxOnePoint)
+toolbox.register("expr_mut", gp.genFull, min_=0, max_=2)
+toolbox.register("mutate", gp.mutUniform, expr=toolbox.expr_mut, pset=pset)
+
+# %%
 def async_map(func, jobs):
     return Parallel(n_jobs=-1, backend='threading')(delayed(func)(job) for job in jobs)
-toolbox.register('map', async_map)
-
-toolbox.register('evaluate', evaluate)
+toolbox.register("map", async_map)
 
 # %%
-toolbox.register('select', tools.selTournament, tournsize=3)
-toolbox.register('mut_uniform', gep.mutate_uniform, pset=pset, ind_pb=0.05, pb=1)
-toolbox.register('mut_invert', gep.invert, pb=0.1)
-toolbox.register('mut_is_transpose', gep.is_transpose, pb=0.1)
-toolbox.register('mut_ris_transpose', gep.ris_transpose, pb=0.1)
-toolbox.register('mut_gene_transpose', gep.gene_transpose, pb=0.1)
-toolbox.register('cx_1p', gep.crossover_one_point, pb=0.3)
-toolbox.register('cx_2p', gep.crossover_two_point, pb=0.2)
-toolbox.register('cx_gene', gep.crossover_gene, pb=0.1)
-toolbox.register('mut_dc', gep.mutate_uniform_dc, ind_pb=0.05, pb=1)
-toolbox.register('mut_invert_dc', gep.invert_dc, pb=0.1)
-toolbox.register('mut_transpose_dc', gep.transpose_dc, pb=0.1)
-toolbox.register('mut_rnc_array_dc', gep.mutate_rnc_array_dc, rnc_gen=toolbox.rnc_gen, ind_pb='0.5p')
-toolbox.pbs['mut_rnc_array_dc'] = 1
+def main():
+    random.seed(10)
+    start_time = time.time()
+    pop = toolbox.population(n=100)
+    hof = tools.HallOfFame(10)
+    stats = tools.Statistics(lambda ind: ind.fitness.values)
+    stats.register("elapsed", lambda _: f"{time.time() - start_time:.2f}s")
+    stats.register("avg", np.nanmean)
+    stats.register("std", np.nanstd)
+    stats.register("min", np.nanmin)
+    stats.register("max", np.nanmax)
 
-# %%
-stats = tools.Statistics(key=lambda ind: ind.fitness.values[0])
-stats.register("avg", np.nanmean)
-stats.register("std", np.nanstd)
-stats.register("min", np.nanmin)
-stats.register("max", np.nanmax)
-stats.register("count", lambda x: len(x) - np.isnan(x).sum())
+    algorithms.eaSimple(pop, toolbox, 0.5, 0.2, 40, stats, halloffame=hof, verbose=True)
 
-# %%
-n_pop = 200
-n_gen = 50
-champs = 10
-pop = toolbox.population(n=n_pop)
-hof = tools.HallOfFame(champs)
+    return pop, stats, hof
 
-# %%
-pop, log = gep.gep_simple(pop, toolbox, n_generations=n_gen, n_elites=1, stats=stats, hall_of_fame=hof, verbose=True)
-
+_, _, hof = main()
 for elite in hof:
-    print(gep.simplify(elite, symbolic_function_map={
-        "add": lambda x, y: sp.Symbol(f'{x} + {y}'),
-        "sub": lambda x, y: sp.Symbol(f'{x} - {y}'),
-        "mul": lambda x, y: sp.Symbol(f'{x} * {y}'),
-        "div": lambda x, y: sp.Symbol(f'{x} / {y}'),
-        "sqrt": lambda x: sp.Symbol(f'sqrt({x})'),
-        "ssqrt": lambda x: sp.Symbol(f'ssqrt({x})'),
-    }))
+    print(elite)

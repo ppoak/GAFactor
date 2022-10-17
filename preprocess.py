@@ -5,41 +5,6 @@ import copy
 from sklearn.impute import SimpleImputer
 from sklearn import preprocessing
 
-# %%
-#start = "2018-01-01"
-#end = "2022-01-01"
-#data = pd.read_parquet('data/kline_daily.parquet')
-#
-## %%
-#adj_open = data.loc[start:end, "open"] * data.loc[start:end, "back_adjfactor"]
-#adj_open = adj_open.unstack()
-#adj_open.to_parquet('data/raw_factor/adj_open.parquet')
-#
-## %%
-#adj_close = data.loc[start:end, "close"] * data.loc[start:end, "back_adjfactor"]
-#adj_close = adj_close.unstack()
-#adj_close.to_parquet('data/raw_factor/adj_close.parquet')
-#
-## %%
-#adj_high = data.loc[start:end, "high"] * data.loc[start:end, "back_adjfactor"]
-#adj_high = adj_high.unstack()
-#adj_high.to_parquet('data/raw_factor/adj_high.parquet')
-#
-## %%
-#adj_low = data.loc[start:end, "low"] * data.loc[start:end, "back_adjfactor"]
-#adj_low = adj_low.unstack()
-#adj_low.to_parquet('data/raw_factor/adj_low.parquet')
-#
-## %%
-#volume = data.loc[start:end, "volume"].unstack()
-#volume.to_parquet('data/raw_factor/volume.parquet')
-#
-## %%
-#label = data.groupby(level=1)['open'].shift(-2) / data.groupby(level=1)['open'].shift(-1) - 1
-#label = label.loc[start:end].unstack()
-#label.to_parquet('data/raw_factor/label.parquet')
-#
-
 
 def missing_correct(data:pd.DataFrame, method:str,fill_value=None) -> pd.DataFrame:
     """
@@ -126,41 +91,41 @@ def normalize_correct(data, opt)-> pd.DataFrame:
 
 
 if __name__ == '__main__':
-    #data = pd.read_excel(r'/Users/taiyunshuai/Desktop/stock_data.xlsx',index_col = [0,1])
+    #data = pd.read_excel(r'stock_data.xlsx',index_col = [0,1])
     #print(missing_correct(data,'constant',1))
     #print(median_correct(data))
     #print(standard_correct(data))
     #print(min_max_correct(data,[0,10]))
     #print(normalize_correct(missing_correct(data,'constant',1),'max'))
-    data = pd.read_parquet(r'/Users/taiyunshuai/Desktop/kline_daily.parquet')
+    data = pd.read_parquet(r'data/kline_daily.parquet')
     #开盘价
-    dj_open_1 = pd.DataFrame(data.loc[:, "open"] * data.loc[:, "back_adjfactor"],columns=['adj_open'])
-    dj_open_2 = adj_open_1.groupby('date').apply(missing_correct,'constant',0)
-    dj_open = adj_open_2.groupby('date').apply(standard_correct)
-    dj_open.to_parquet('/Users/taiyunshuai/Desktop/GAFactor/data/preprocessing_data/adj_open.parquet')
+    adj_open_1 = pd.DataFrame(data.loc[:, "open"] * data.loc[:, "back_adjfactor"],columns=['adj_open'])
+    adj_open_2 = adj_open_1.groupby('date').apply(missing_correct,'constant',0)
+    adj_open = adj_open_2.groupby('date').apply(standard_correct)
+    adj_open.squeeze().unstack().to_parquet('data/raw_factor/adj_open.parquet')
     #收盘价
     adj_close_1 = pd.DataFrame(data.loc[:, "close"] * data.loc[:, "back_adjfactor"],columns=['adj_close'])
     adj_close_2 = adj_close_1.groupby('date').apply(missing_correct,'constant',0)
     adj_close = adj_close_2.groupby('date').apply(standard_correct)
-    adj_close.to_parquet('/Users/taiyunshuai/Desktop/GAFactor/data/preprocessing_data/adj_close.parquet')
+    adj_close.squeeze().unstack().to_parquet('data/raw_factor/adj_close.parquet')
     #最高价
     adj_high_1 = pd.DataFrame(data.loc[:, "high"] * data.loc[:, "back_adjfactor"],columns=['adj_high'])
     adj_high_2 = adj_high_1.groupby('date').apply(missing_correct,'constant',0)
     adj_high = adj_high_2.groupby('date').apply(standard_correct)
-    adj_high.to_parquet('/Users/taiyunshuai/Desktop/GAFactor/data/preprocessing_data/adj_high.parquet')
+    adj_high.squeeze().unstack().to_parquet('data/raw_factor/adj_high.parquet')
     #最低价
     adj_low_1 = pd.DataFrame(data.loc[:, "low"] * data.loc[:, "back_adjfactor"],columns=['adj_low'])
     adj_low_2 = adj_low_1.groupby('date').apply(missing_correct,'constant',0)
     adj_low = adj_low_2.groupby('date').apply(standard_correct)
-    adj_low.to_parquet('/Users/taiyunshuai/Desktop/GAFactor/data/preprocessing_data/adj_low.parquet')
+    adj_low.squeeze().unstack().to_parquet('data/raw_factor/adj_low.parquet')
     #volume
     volume_1 = pd.DataFrame(data.loc[:, "volume"],columns=['volume'])
     volume_2 = volume_1.groupby('date').apply(missing_correct,'constant',0)
     volume = volume_2.groupby('date').apply(standard_correct)
-    volume.to_parquet('/Users/taiyunshuai/Desktop/GAFactor/data/preprocessing_data/volume.parquet')
+    volume.squeeze().unstack().to_parquet('data/raw_factor/volume.parquet')
     #label
     label_1 = pd.DataFrame((data.groupby(level=1)['open'].shift(-2) / data.groupby(level=1)['open'].shift(-1)).rename('label')) 
     label_2 = label_1.groupby('date').apply(missing_correct,'constant',0)
     label = label_2.groupby('date').apply(standard_correct)
-    label.to_parquet('/Users/taiyunshuai/Desktop/GAFactor/data/preprocessing_data/label.parquet')
+    label.squeeze().unstack().to_parquet('data/raw_factor/label.parquet')
 
