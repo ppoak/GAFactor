@@ -100,6 +100,26 @@ def split_data(data:pd.DataFrame, train_start:str, train_end:str, test_start:str
     return train,test
 
 
+def data_preprocess(data:pd.DataFrame,train_start:str,train_end:str,test_start:str,test_end:str,standardize=False):
+    """
+    实现功能：根据设置的train_span,test_span，以及是否标准化对数据进行处理
+    train_start:：训练集开始时间例：‘2021-01-01’
+    train_end:训练集结束时间
+    test_start:测试集开始时间
+    test_end:测试集结束时间
+    standardize:是否标准化参数
+    """
+    train,test = split_data(data,train_start,train_end,test_start,test_end)
+    if standardize == True:
+        train_1  = train.groupby('date').apply(standard_correct).squeeze().unstack()
+        test_1   = test.groupby('date').apply(standard_correct).squeeze().unstack()
+    else:
+        train_1 = train.squeeze().unstack()
+        test_1 = test.groupby('date').apply(standard_correct).squeeze().unstack()
+    return train_1,test_1
+
+
+
 if __name__ == '__main__':
     #data = pd.read_excel(r'stock_data.xlsx',index_col = [0,1])
     #print(missing_correct(data,'constant',1))
