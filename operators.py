@@ -1,5 +1,4 @@
 import numpy as np
-import pandas as pd
 
 
 def add(a, b):
@@ -42,3 +41,6 @@ def ssqrt(a):
 
 def square(a):
     return a ** 2
+
+def ignore(a):
+    return a

@@ -15,7 +15,7 @@ warnings.filterwarnings('ignore')
 train_start = "2022-03-01"
 train_end = "2022-05-31"
 test_start = "2022-06-01"
-test_end = "2022-08-31"
+test_end = "2022-06-30"
 adj_open = pd.read_parquet('data/raw_factor/adj_open.parquet')
 adj_close = pd.read_parquet('data/raw_factor/adj_close.parquet')
 adj_high = pd.read_parquet('data/raw_factor/adj_high.parquet')
@@ -40,11 +40,18 @@ label_test = label.loc[test_start:test_end].values
 # %%
 pset = gp.PrimitiveSetTyped("MAIN", itertools.repeat(np.ndarray, 5), np.ndarray, "ARG")
 pset.addPrimitive(operators.add, [np.ndarray, np.ndarray], np.ndarray)
+pset.addPrimitive(operators.add, [np.ndarray, float], np.ndarray)
 pset.addPrimitive(operators.sub, [np.ndarray, np.ndarray], np.ndarray)
+pset.addPrimitive(operators.sub, [np.ndarray, float], np.ndarray)
 pset.addPrimitive(operators.mul, [np.ndarray, np.ndarray], np.ndarray)
+pset.addPrimitive(operators.mul, [np.ndarray, float], np.ndarray)
 pset.addPrimitive(operators.div, [np.ndarray, np.ndarray], np.ndarray)
-pset.addEphemeralConstant("randint", lambda: random.randint(1, 10), int)
-pset.addEphemeralConstant("rand100", lambda: random.uniform(1e-2, 1), float)
+pset.addPrimitive(operators.div, [np.ndarray, float], np.ndarray)
+pset.addPrimitive(operators.sqrt, [np.ndarray], np.ndarray)
+pset.addPrimitive(operators.ssqrt, [np.ndarray], np.ndarray)
+pset.addPrimitive(operators.square, [np.ndarray], np.ndarray)
+pset.addPrimitive(operators.ignore, [float], float)
+pset.addEphemeralConstant("rand100", lambda: random.uniform(1e-2, 100), float)
 pset.renameArguments(ARG0='adj_open')
 pset.renameArguments(ARG1='adj_high')
 pset.renameArguments(ARG2='adj_low')
@@ -98,13 +105,15 @@ def main():
     stats.register("min", np.nanmin)
     stats.register("max", np.nanmax)
 
-    algorithms.eaSimple(pop, toolbox, 0.5, 0.2, 100, stats, halloffame=hof, verbose=True)
+    algorithms.eaSimple(pop, toolbox, 0.5, 0.2, 50, stats, halloffame=hof, verbose=True)
 
     return pop, stats, hof
 
 _, _, hof = main()
 for elite in hof:
-    print(elite)
+    print(elite, end='\t')
     pred_test = toolbox.compile(elite)(adj_open_test, adj_high_test, adj_low_test, adj_close_test, volume_test)
-    corr = pd.DataFrame(pred_test).corrwith(pd.DataFrame(label_test), axis=1)
-    print(f"Noraml IC on test Dataset: {corr.mean()}")
+    pred_train = toolbox.compile(elite)(adj_open_train, adj_high_train, adj_low_train, adj_close_train, volume_train)
+    corr_train = pd.DataFrame(pred_train).corrwith(pd.DataFrame(label_train), axis=1)
+    corr_test = pd.DataFrame(pred_test).corrwith(pd.DataFrame(label_test), axis=1)
+    print(f"Train IC: {corr_train.mean()}; Test IC: {corr_test.mean()}")
