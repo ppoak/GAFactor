@@ -134,10 +134,10 @@ if __name__ == '__main__':
     #print(normalize_correct(missing_correct(data,'constant',1),'max'))
     data = pd.read_parquet(r'/Users/taiyunshuai/Desktop/kline_daily.parquet')
     #开盘价
-    dj_open_1 = pd.DataFrame(data.loc[:, "open"] * data.loc[:, "back_adjfactor"],columns=['adj_open'])
-    dj_open_2 = adj_open_1.groupby('date').apply(missing_correct,'constant',0)
-    dj_open = adj_open_2.groupby('date').apply(standard_correct)
-    dj_open.to_parquet('/Users/taiyunshuai/Desktop/GAFactor/data/preprocessing_data/adj_open.parquet')
+    adj_open_1 = pd.DataFrame(data.loc[:, "open"] * data.loc[:, "back_adjfactor"],columns=['adj_open'])
+    adj_open_2 = adj_open_1.groupby('date').apply(missing_correct,'constant',0)
+    adj_open = adj_open_2.groupby('date').apply(standard_correct)
+    adj_open.to_parquet('/Users/taiyunshuai/Desktop/GAFactor/data/preprocessing_data/adj_open.parquet')
     #收盘价
     adj_close_1 = pd.DataFrame(data.loc[:, "close"] * data.loc[:, "back_adjfactor"],columns=['adj_close'])
     adj_close_2 = adj_close_1.groupby('date').apply(missing_correct,'constant',0)
