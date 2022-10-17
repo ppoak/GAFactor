@@ -86,10 +86,6 @@ def normalize_correct(data, opt)-> pd.DataFrame:
     return data_final
 
 
-
-
-
-
 if __name__ == '__main__':
     #data = pd.read_excel(r'stock_data.xlsx',index_col = [0,1])
     #print(missing_correct(data,'constant',1))
