@@ -154,7 +154,7 @@ if __name__ == '__main__':
     volume = volume_2.groupby('date').apply(standard_correct)
     volume.squeeze().unstack().to_parquet('data/raw_factor/volume.parquet')
     #label
-    label_1 = pd.DataFrame((data.groupby(level=1)['open'].shift(-2) / data.groupby(level=1)['open'].shift(-1)).rename('label')) 
+    label_1 = pd.DataFrame((data.groupby(level=1)['open'].shift(-5) / data.groupby(level=1)['open'].shift(-1) - 1).rename('label')) 
     label_2 = label_1.groupby('date').apply(missing_correct,'constant',0)
     label = label_2.groupby('date').apply(standard_correct)
     label.squeeze().unstack().to_parquet('data/raw_factor/label.parquet')

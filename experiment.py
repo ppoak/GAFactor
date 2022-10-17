@@ -15,14 +15,13 @@ warnings.filterwarnings('ignore')
 train_start = "2022-03-01"
 train_end = "2022-05-31"
 test_start = "2022-06-01"
-test_end = "2022-06-30"
+test_end = "2022-06-15"
 adj_open = pd.read_parquet('data/raw_factor/adj_open.parquet')
 adj_close = pd.read_parquet('data/raw_factor/adj_close.parquet')
 adj_high = pd.read_parquet('data/raw_factor/adj_high.parquet')
 adj_low = pd.read_parquet('data/raw_factor/adj_low.parquet')
 volume = pd.read_parquet('data/raw_factor/volume.parquet')
 label = pd.read_parquet('data/raw_factor/label.parquet')
-
 # %%
 adj_open_train = adj_open.loc[train_start:train_end].values
 adj_close_train = adj_close.loc[train_start:train_end].values
@@ -59,7 +58,7 @@ pset.renameArguments(ARG3='adj_close')
 pset.renameArguments(ARG4='vol')
 
 # %%
-creator.create("FitnessMax", base.Fitness, weights=(1.0,))
+creator.create("FitnessMax", base.Fitness, weights=(1.0, -1.0))
 creator.create("Individual", gp.PrimitiveTree, fitness=creator.FitnessMax)
 
 toolbox = base.Toolbox()
@@ -69,22 +68,31 @@ toolbox.register("population", tools.initRepeat, list, toolbox.individual)
 toolbox.register("compile", gp.compile, pset=pset)
 
 # %%
+def corr_dayavg(pred: np.ndarray, label: np.ndarray):
+    pred_demean = np.nan_to_num(pred - np.nanmean(pred, axis=1).repeat(pred.shape[1]).reshape(pred.shape[0], pred.shape[1]))
+    label_demean = np.nan_to_num(label - np.nanmean(label, axis=1).repeat(
+        label.shape[1]).reshape(label.shape[0], label.shape[1]))
+    corrs = (pred_demean @ label_demean.T).diagonal() / (
+        np.linalg.norm(pred_demean, axis=1) * np.linalg.norm(label_demean, axis=1))
+    return corrs.mean()
+
+def mse_dayavg(pred: np.ndarray, label: np.ndarray):
+    mse = np.nanmean((label - pred)**2, axis=1).mean()
+    return mse
+
 def evaluate(individual):
     func: callable = toolbox.compile(individual)
     pred: np.ndarray = func(adj_open_train, adj_high_train, adj_low_train, adj_close_train, volume_train)
     if not isinstance(pred, np.ndarray):
         return np.nan,
-    pred_demean = np.nan_to_num(pred - np.nanmean(pred, axis=1).repeat(pred.shape[1]).reshape(pred.shape[0], pred.shape[1]))
-    label_demean = np.nan_to_num(label_train - np.nanmean(label_train, axis=1).repeat(
-        label_train.shape[1]).reshape(label_train.shape[0], label_train.shape[1]))
-    corrs = (pred_demean @ label_demean.T).diagonal() / (
-        np.linalg.norm(pred_demean, axis=1) * np.linalg.norm(label_demean, axis=1))
-    return np.abs(corrs.mean()),
+    corr = corr_dayavg(pred, label_train)
+    mse = mse_dayavg(pred, label_train)
+    return corr, mse
 
 toolbox.register("evaluate", evaluate)
 toolbox.register("select", tools.selTournament, tournsize=3)
 toolbox.register("mate", gp.cxOnePoint)
-toolbox.register("expr_mut", gp.genFull, min_=0, max_=2)
+toolbox.register("expr_mut", gp.genFull, min_=1, max_=2)
 toolbox.register("mutate", gp.mutUniform, expr=toolbox.expr_mut, pset=pset)
 
 # %%
@@ -98,14 +106,14 @@ def main():
     start_time = time.time()
     pop = toolbox.population(n=200)
     hof = tools.HallOfFame(1)
-    stats = tools.Statistics(lambda ind: ind.fitness.values)
+    stats = tools.Statistics(lambda ind: ind.fitness.values[0])
     stats.register("elapsed", lambda _: f"{time.time() - start_time:.2f}s")
     stats.register("avg", np.nanmean)
     stats.register("std", np.nanstd)
     stats.register("min", np.nanmin)
     stats.register("max", np.nanmax)
 
-    algorithms.eaSimple(pop, toolbox, 0.5, 0.2, 50, stats, halloffame=hof, verbose=True)
+    algorithms.eaSimple(pop, toolbox, 0.5, 0.2, 40, stats, halloffame=hof, verbose=True)
 
     return pop, stats, hof
 
