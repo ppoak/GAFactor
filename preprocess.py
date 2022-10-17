@@ -86,6 +86,20 @@ def normalize_correct(data, opt)-> pd.DataFrame:
     return data_final
 
 
+def split_data(data:pd.DataFrame, train_start:str, train_end:str, test_start:str, test_end:str)->pd.DataFrame:
+    """
+    对数据按照设定时间进行
+
+    train_start:：训练集开始时间例：‘2021-01-01’
+    train_end:训练集结束时间
+    test_start:测试集开始时间
+    test_end:测试集结束时间
+    """
+    train = data.copy()[(data.index >= train_start) & (data.index < train_end)]
+    test = data.copy()[(data.index >= test_start) & (data.index < test_end)]
+    return train,test
+
+
 if __name__ == '__main__':
     #data = pd.read_excel(r'stock_data.xlsx',index_col = [0,1])
     #print(missing_correct(data,'constant',1))
