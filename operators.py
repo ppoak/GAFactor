@@ -45,14 +45,17 @@ def square(a):
 def ignore(a):
     return a
 
+def ignore_int(a):
+    return a
+
 def sma(x: np.ndarray, d: int):
-    ma = np.zeros([x.shape[0], x.shape[1]])
-    for i in range(ma.shape[0]-d+1): # 
-        ma[i:i+(d),i:i+1] = 1/d
+    ma = np.zeros([x.shape[0], x.shape[0]-d+1])
+    for i in range(ma.shape[1]-d+1): # 
+        ma[i:i+d,i:i+1] = 1/d
     ma_res =  x.T @ ma
     ma_res = np.c_[ np.zeros([x.shape[1], d-1]) , ma_res]
     return ma_res.T
 
 if __name__ == '__main__':
-    data = np.arange(24).reshape([6,4])
+    data = np.arange(10*1200).reshape([10,1200])
     print(sma(data, 3))
