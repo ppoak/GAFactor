@@ -49,13 +49,18 @@ def ignore_int(a):
     return a
 
 def sma(x: np.ndarray, d: int):
+    print(x)
     ma = np.zeros([x.shape[0], x.shape[0]-d+1])
-    for i in range(ma.shape[1]-d+1): # 
+    for i in range(ma.shape[0]-d+1): # 
         ma[i:i+d,i:i+1] = 1/d
     ma_res =  x.T @ ma
     ma_res = np.c_[ np.zeros([x.shape[1], d-1]) , ma_res]
     return ma_res.T
 
+def ema(x: np.ndarray, d:int):
+    ema = np.zeros([x.shape[0], x.shape[0]-d+1])
+
+
 if __name__ == '__main__':
-    data = np.arange(10*1200).reshape([10,1200])
+    data = np.arange(8*9).reshape([8,9])
     print(sma(data, 3))
