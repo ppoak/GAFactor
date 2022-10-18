@@ -1,3 +1,4 @@
+import numba
 import numpy as np
 
 
@@ -48,13 +49,15 @@ def ignore(a):
 def ignore_int(a):
     return a
 
-def sma(x: np.ndarray, d: int):
-    ma = np.zeros([x.shape[0], x.shape[0]-d+1])
-    for i in range(ma.shape[0]-d+1): # 
-        ma[i:i+d,i:i+1] = 1/d
-    ma_res =  x.T @ ma
-    ma_res = np.c_[ np.zeros([x.shape[1], d-1]) , ma_res]
-    return ma_res.T
+@numba.njit
+def sma(x: np.ndarray, d: int) -> np.ndarray:
+    ma = np.zeros((x.shape[0], x.shape[0]-d+1))
+    for i in range(ma.shape[0]-d+1):
+        ma[i:(i + d), i] = 1/d
+    res =  x.T @ ma
+    res = np.hstack((np.full((x.shape[1], d-1), fill_value=np.nan), res))
+    return res.T
+    
 
 def ema(x: np.ndarray, d:int):
     ema = np.zeros([x.shape[0], x.shape[0]-d+1])
