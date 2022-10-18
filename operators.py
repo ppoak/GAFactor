@@ -57,12 +57,29 @@ def sma(x: np.ndarray, d: int) -> np.ndarray:
     res =  x.T @ ma
     res = np.hstack((np.full((x.shape[1], d-1), fill_value=np.nan), res))
     return res.T
-    
+
+def delay(x: np.ndarray, d: int) -> np.ndarray:
+    res = np.roll(x, d, axis=0)
+    res[:d, :] = np.nan
+    return res
+
+def ts_rank(x: np.ndarray, d: int) -> np.ndarray:
+    res = np.full_like(x, fill_value=np.nan)
+    for row in range(data.shape[0] - d + 1):
+        rank = data[row:row + d].argsort(axis=0).argsort(axis=0)
+        res[row + d - 1, :] = rank[-1, :]
+    return res
 
 def ema(x: np.ndarray, d:int):
     ema = np.zeros([x.shape[0], x.shape[0]-d+1])
 
 
 if __name__ == '__main__':
-    data = np.arange(8*9).reshape([8,9])
-    print(sma(data, 3))
+    np.random.seed(0)
+    data = np.array([
+        [1, 2, 4, 2, 3],
+        [3, 2, 2, 1, 5],
+        [2, 4, 3, 1, 5],
+        [2, 3, 3, 5, 4],
+    ], dtype='float32')
+    print(ts_rank(data, 3))
