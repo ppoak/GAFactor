@@ -49,7 +49,6 @@ def ignore_int(a):
     return a
 
 def sma(x: np.ndarray, d: int):
-    print(x)
     ma = np.zeros([x.shape[0], x.shape[0]-d+1])
     for i in range(ma.shape[0]-d+1): # 
         ma[i:i+d,i:i+1] = 1/d
