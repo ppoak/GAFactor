@@ -49,7 +49,7 @@ def ignore(a):
 def ignore_int(a):
     return a
 
-@numba.njit
+# @numba.njit
 def sma(x: np.ndarray, d: int) -> np.ndarray:
     ma = np.zeros((x.shape[0], x.shape[0]-d+1))
     for i in range(ma.shape[0]-d+1):
@@ -65,21 +65,37 @@ def delay(x: np.ndarray, d: int) -> np.ndarray:
 
 def ts_rank(x: np.ndarray, d: int) -> np.ndarray:
     res = np.full_like(x, fill_value=np.nan)
-    for row in range(data.shape[0] - d + 1):
-        rank = data[row:row + d].argsort(axis=0).argsort(axis=0)
+    for row in range(x.shape[0] - d + 1):
+        rank = x[row:row + d].argsort(axis=0).argsort(axis=0)
         res[row + d - 1, :] = rank[-1, :]
     return res
 
-def ema(x: np.ndarray, d:int):
+def decay_linear(x: np.ndarray, d:int):
     ema = np.zeros([x.shape[0], x.shape[0]-d+1])
 
 
+def stddev(x: np.ndarray, d: int):
+    res = np.full_like(x, fill_value=np.nan)
+    for row in range(x.shape[0] - d + 1):
+        res[row + d - 1, :] = np.std(x[row:row + d], axis=0)
+    return res
+
+def correlation(x: np.ndarray, y: np.ndarray, d: int):
+    res = np.full_like(x, fill_value=np.nan)
+    for row in range(x.shape[0] - d + 1):
+        x_demean = np.nan_to_num(x - np.nanmean(x[row:row + d], axis=0).repeat(x.shape[0]).reshape(x.shape[1], x.shape[0]).T)
+        y_demean = np.nan_to_num(y - np.nanmean(y[row:row + d], axis=0).repeat(x.shape[0]).reshape(x.shape[1], x.shape[0]).T)
+        res[row + d - 1, :] =(x_demean.T @ y_demean).diagonal() \
+                / (np.linalg.norm(x_demean, axis=0) * np.linalg.norm(y_demean, axis=0))
+    return res
+
 if __name__ == '__main__':
     np.random.seed(0)
-    data = np.array([
+    d = np.array([
         [1, 2, 4, 2, 3],
         [3, 2, 2, 1, 5],
         [2, 4, 3, 1, 5],
-        [2, 3, 3, 5, 4],
+        [2, 3, 3, 1, 4],
     ], dtype='float32')
-    print(ts_rank(data, 3))
+    print(stddev(d, 2))
+
