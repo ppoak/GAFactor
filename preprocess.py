@@ -44,15 +44,26 @@ def median_correct(data:pd.DataFrame, n=5)->pd.DataFrame:
     return new_data
 
 
-def standard_correct(data:pd.DataFrame)-> pd.DataFrame:
-    """
-    对数据进行标准化
-    data: 预处理的数据,pd.DataFrame:时间与股票代码双索引数据
-    """
-    data_scaled = preprocessing.scale(data)
-    data_standard = pd.DataFrame(data_scaled,index = data.index,columns=data.columns)
-    return data_standard
+# def standard_correct(data:pd.DataFrame)-> pd.DataFrame:
+    # """
+    # 对数据进行标准化
+    # data: 预处理的数据,pd.DataFrame:时间与股票代码双索引数据
+    # """
+    # data_scaled = preprocessing.scale(data)
+    # data_standard = pd.DataFrame(data_scaled,index = data.index,columns=data.columns)
+    # return data_standard
 
+def zscore_standard(data):
+    """
+    ZScore标准化函数
+    原始值减均值后除以标准差，使分布尽可能逼近N(0, 1)分布
+    :param data: numpy.array, 待标准化的原值
+    :return: numpy.array, 标准化后的数据
+    """
+    mean = np.mean(data[~np.isnan(data)])
+    std = np.std(data[~np.isnan(data)])
+    new_data = (data - mean) / std
+    return new_data
 
 def min_max_correct(data:pd.DataFrame,feature_range=None)-> pd.DataFrame:
     """
@@ -111,11 +122,11 @@ def data_preprocess(data:pd.DataFrame,train_start:str,train_end:str,test_start:s
     """
     train,test = split_data(data,train_start,train_end,test_start,test_end)
     if standardize == True:
-        train_1  = train.groupby('date').apply(standard_correct).squeeze().unstack()
-        test_1   = test.groupby('date').apply(standard_correct).squeeze().unstack()
+        train_1  = train.groupby('date').apply(zscore_standard).squeeze().unstack()
+        test_1   = test.groupby('date').apply(zscore_standard).squeeze().unstack()
     else:
         train_1 = train.squeeze().unstack()
-        test_1 = test.groupby('date').apply(standard_correct).squeeze().unstack()
+        test_1 = test.groupby('date').apply(zscore_standard).squeeze().unstack()
     return train_1,test_1
 
 
