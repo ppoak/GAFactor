@@ -89,6 +89,14 @@ def correlation(x: np.ndarray, y: np.ndarray, d: int):
                 / (np.linalg.norm(x_demean, axis=0) * np.linalg.norm(y_demean, axis=0))
     return res
 
+def covariance(x: np.ndarray,y: np.ndarray,d: int):
+    res = np.full_like(x, fill_value=np.nan)
+    for row in range(x.shape[0] - d + 1):
+        x_demean = np.nan_to_num(x - np.nanmean(x[row:row + d], axis=0).repeat(x.shape[0]).reshape(x.shape[1], x.shape[0]).T)
+        y_demean = np.nan_to_num(y - np.nanmean(y[row:row + d], axis=0).repeat(x.shape[0]).reshape(x.shape[1], x.shape[0]).T)
+        res[row + d - 1, :] = (x_demean.T @ y_demean).diagonal() / (d - 1)
+    return res
+
 if __name__ == '__main__':
     np.random.seed(0)
     d = np.array([
