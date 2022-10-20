@@ -5,7 +5,37 @@ import copy
 from sklearn.impute import SimpleImputer
 from sklearn import preprocessing
 
+# %%
+def standarize(data):
+    tsmean = data.groupby(level=1).mean()
+    tsstd = data.groupby(level=1).std()
+    return data.groupby(level=0).apply(lambda x: (x - tsmean) / tsstd)
 
+train_start = "2022-03-01"
+train_end = "2022-05-31"
+test_start = "2022-06-01"
+test_end = "2022-08-31"
+
+kline = pd.read_parquet('data/kline_daily.parquet')[['open', 'high', 'low', 'close', 'volume', 'back_adjfactor']]
+kline.iloc[:, :-2] = kline.iloc[:, :-2].mul(kline.iloc[:, -1], axis=0)
+kline.drop('back_adjfactor', axis=1, inplace=True)
+
+label = kline['open'].groupby(level=1).shift(-2) / kline['open'].groupby(level=1).shift(-1) - 1
+label.name = 'label'
+train_label = label.loc[train_start:train_end]
+test_label = label.loc[test_start:test_end]
+train_label = standarize(train_label)
+test_label = standarize(test_label)
+
+train = kline.loc[train_start:train_end]
+test = kline.loc[test_start:test_end]
+train_norm = standarize(train)
+test_norm = standarize(test)
+
+train_dataset = pd.concat([train_norm, train_label], axis=1, sort=True)
+test_dataset = pd.concat([test_norm, test_label], axis=1, sort=True)
+
+# %%
 def missing_correct(data:pd.DataFrame, method:str,fill_value=None) -> pd.DataFrame:
     """
     对缺失值进行处理

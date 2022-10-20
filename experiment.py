@@ -12,29 +12,24 @@ from deap import tools, creator, base, gp, algorithms
 warnings.filterwarnings('ignore')
 
 # %%
-train_start = "2022-01-01"
-train_end = "2022-05-31"
-test_start = "2022-06-01"
-test_end = "2022-07-30"
-adj_open = pd.read_parquet('data/raw_factor/adj_open.parquet')
-adj_close = pd.read_parquet('data/raw_factor/adj_close.parquet')
-adj_high = pd.read_parquet('data/raw_factor/adj_high.parquet')
-adj_low = pd.read_parquet('data/raw_factor/adj_low.parquet')
-volume = pd.read_parquet('data/raw_factor/volume.parquet')
-label = pd.read_parquet('data/raw_factor/label.parquet')
-# %%
-adj_open_train = adj_open.loc[train_start:train_end].values
-adj_close_train = adj_close.loc[train_start:train_end].values
-adj_high_train = adj_high.loc[train_start:train_end].values
-adj_low_train = adj_low.loc[train_start:train_end].values
-volume_train = volume.loc[train_start:train_end].values
-label_train = label.loc[train_start:train_end].values
-adj_open_test = adj_open.loc[test_start:test_end].values
-adj_close_test = adj_close.loc[test_start:test_end].values
-adj_high_test = adj_high.loc[test_start:test_end].values
-adj_low_test = adj_low.loc[test_start:test_end].values
-volume_test = volume.loc[test_start:test_end].values
-label_test = label.loc[test_start:test_end].values
+train = pd.read_parquet('data/train_dataset.parquet')
+test = pd.read_parquet('data/test_dataset.parquet')
+train_open, train_high, train_low, train_close, train_volume, train_label = (
+    train['open'].unstack().values,
+    train['high'].unstack().values,
+    train['low'].unstack().values,
+    train['close'].unstack().values,
+    train['volume'].unstack().values,
+    train['label'].unstack().values,
+)
+test_open, test_high, test_low, test_close, test_volume, test_label = (
+    test['open'].unstack().values,
+    test['high'].unstack().values,
+    test['low'].unstack().values,
+    test['close'].unstack().values,
+    test['volume'].unstack().values,
+    test['label'].unstack().values,
+)
 
 # %%
 pset = gp.PrimitiveSetTyped("MAIN", itertools.repeat(np.ndarray, 5), np.ndarray, "ARG")
@@ -77,7 +72,7 @@ creator.create("FitnessMax", base.Fitness, weights=(1.0, ))
 creator.create("Individual", gp.PrimitiveTree, fitness=creator.FitnessMax)
 
 toolbox = base.Toolbox()
-toolbox.register("expr", gp.genHalfAndHalf, pset=pset, min_=1, max_=3)
+toolbox.register("expr", gp.genFull, pset=pset, min_=1, max_=10)
 toolbox.register("individual", tools.initIterate, creator.Individual, toolbox.expr)
 toolbox.register("population", tools.initRepeat, list, toolbox.individual)
 toolbox.register("compile", gp.compile, pset=pset)
@@ -106,10 +101,10 @@ def count_nan(pred: np.ndarray):
 
 def evaluate(individual):
     func: callable = toolbox.compile(individual)
-    pred: np.ndarray = func(adj_open_train, adj_high_train, adj_low_train, adj_close_train, volume_train)
+    pred: np.ndarray = func(train_open, train_high, train_low, train_close, train_volume)
     if not isinstance(pred, np.ndarray):
         return np.nan,
-    corr = corr_dayavg(pred, label_train)
+    corr = corr_dayavg(pred, train_label)
     # mse = mse_dayavg(pred, label_train)
     # nan_punish = count_nan(pred)
     return np.abs(corr), 
@@ -122,7 +117,7 @@ toolbox.register("mutate", gp.mutUniform, expr=toolbox.expr_mut, pset=pset)
 
 # %%
 def async_map(func, jobs):
-    return Parallel(n_jobs=1, backend='threading')(delayed(func)(job) for job in jobs)
+    return Parallel(n_jobs=-1, backend='threading')(delayed(func)(job) for job in jobs)
 toolbox.register("map", async_map)
 
 # %%
@@ -130,7 +125,7 @@ def main():
     random.seed(10)
     start_time = time.time()
     pop = toolbox.population(n=200)
-    hof = tools.HallOfFame(30)
+    hof = tools.HallOfFame(10)
     stats = tools.Statistics(lambda ind: ind.fitness.values[0])
     stats.register("elapsed", lambda _: f"{time.time() - start_time:.2f}s")
     stats.register("avg", np.nanmean)
@@ -144,9 +139,12 @@ def main():
 
 _, _, hof = main()
 for elite in hof:
-    print(elite, end='\t')
-    pred_test = toolbox.compile(elite)(adj_open_test, adj_high_test, adj_low_test, adj_close_test, volume_test)
-    pred_train = toolbox.compile(elite)(adj_open_train, adj_high_train, adj_low_train, adj_close_train, volume_train)
-    corr_train = pd.DataFrame(pred_train).corrwith(pd.DataFrame(label_train), axis=1)
-    corr_test = pd.DataFrame(pred_test).corrwith(pd.DataFrame(label_test), axis=1)
-    print(f"Train IC: {corr_train.mean()}; Test IC: {corr_test.mean()}")
+    train_pred = toolbox.compile(elite)(train_open, train_high, train_low, train_close, train_volume)
+    test_pred = toolbox.compile(elite)(test_open, test_high, test_low, test_close, test_volume)
+    train_corr = pd.DataFrame(train_pred).corrwith(pd.DataFrame(train_label), axis=1)
+    test_corr = pd.DataFrame(test_pred).corrwith(pd.DataFrame(test_label), axis=1)
+    print(f"Train IC: {train_corr.mean()}; Test IC: {test_corr.mean()}")
+    filename = 'result/contradictory.txt' if (train_corr.mean() * test_corr.mean() < 0) \
+        or np.isnan(train_corr.mean() * test_corr.mean()) else 'result/efficient.txt'
+    with open(filename, 'a') as f:
+        f.write(f'{elite}; train: {train_corr.mean():.4f}, test: {test_corr.mean():.4f}\n')
