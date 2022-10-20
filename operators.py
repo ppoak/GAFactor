@@ -74,6 +74,16 @@ def mean(x: np.ndarray, d: int) -> np.ndarray:
     res = np.hstack((np.full((x.shape[1], d-1), fill_value=np.nan), res))
     return res.T
 
+def ema(x: np.ndarray, d: int) -> np.ndarray:
+    ema = np.zeros((x.shape[0], x.shape[0]-d+1))
+    denominator = np.sum([i for i in range(1, d+1)])
+    for i in range(ema.shape[0]-d+1):
+        for j in range(1, d+1):
+            ema[(i + j - 1):(i + j), i] = j / denominator
+    res =  x.T @ ema
+    res = np.hstack((np.full((x.shape[1], d-1), fill_value=np.nan), res))
+    return res.T
+
 def var(x: np.ndarray, d: int) -> np.ndarray:
     res = np.full_like(x, fill_value=np.nan)
     for row in range(x.shape[0] - d + 1):
@@ -167,5 +177,5 @@ if __name__ == '__main__':
         [2, 4, 3, 1, 5],
         [2, 3, 3, 1, 4],
     ], dtype='float32')
-    print(std(d, 2))
+    print(ema(d, 3))
 
