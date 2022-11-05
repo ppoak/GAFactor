@@ -1,157 +1,410 @@
 import numba
+import math
 import numpy as np
-
+from scipy.stats import kurtosis
 
 def raw(a):
     return a
 
-def abs(a: np.ndarray):
-    return np.abs(a)
+def abs_(x: np.ndarray):
+    return np.abs(x)
+
+def neg(x: np.ndarray):
+    return np.negative(x)
 
 def sign(a: np.ndarray):
     return np.sign(a)
 
-def log(a: np.ndarray):
-    return np.log(a)
-
-def sqrt(a: np.ndarray):
-    if isinstance(a, (int, float)):
-        if a < 0:
-            a = -a
+def sqrt(x: 'np.ndarray | int | float'): # 对于空缺值nan 对于负数nan 对于0=0
+    if isinstance(x, (int, float)):
+        if x < 0:
+            x = -x
     else:
-        a = np.abs(a)
-    return np.sqrt(a)
+        x = np.abs(x)
+    return np.sqrt(x)
 
-def ssqrt(a: np.ndarray):
-    if isinstance(a, (int, float)):
-        if a < 0:
-            a = -a
+def ssqrt(x: 'np.ndarray | int | float'):
+    if isinstance(x, (int, float)):
+        if x < 0:
+            x = -x
             sign = -1
         else:
             sign = 1
     else:
-        sign = np.ones_like(a)
-        sign[a<0] = -1
-        a = np.abs(a)
-    return sign * np.sqrt(a)
+        sign = np.ones_like(x)
+        sign[x<0] = -1
+        x = np.abs(x)
+    return sign * np.sqrt(x)
 
-def square(a: np.ndarray):
-    return a ** 2
+def square(x: np.ndarray):
+    return x ** 2
 
-def add(a: np.ndarray, b: 'int | float'):
-    return a + b
+def add(x: np.ndarray, b: 'np.ndarray | float'):
+    return x + b
 
-def sub(a: np.ndarray, b: 'int | float'):
-    return a -b
+def sub(x: np.ndarray, b: 'np.ndarray | float'):
+    return x - b
 
-def mul(a: np.ndarray, b: 'int | float'):
-    return a * b
+def mul(x: np.ndarray, b: 'np.ndarray | float'):
+    if isinstance(b, (float)):
+        if abs(b-0) < 1e-2:
+            b = 1e-1
+    return x * b
 
-def div(a: np.ndarray, b: 'int | float'):
+def div(x: np.ndarray, b: 'np.ndarray | float'): # 如果不处理0的话, 会产生很多inf
     if isinstance(b, (int, float)):
         if b >= 0:
-            b = max(1e-2, b)
+            b = max(1e-1, b)
         else:
-            b = min(-1e-2, b)
-    return a / b
+            b = min(1e-1, b)
+    return x / b
 
-def power(a: np.array, b: float):
+def power(a: np.array, b: 'float|int'):
+    if b < 0:
+        b = -b
     return np.power(a, b)
 
-def sum(a: np.ndarray, d: int):
-    mat = np.zeros((a.shape[0], a.shape[0]-d+1))
+def maximum(x: np.ndarray, d: 'float|int'):
+    x[x<d] = d
+    x = x.astype('float64')
+    x[np.isinf(x)] = np.nan
+    x = np.nan_to_num(x)
+    for row in x:
+        if np.count_nonzero(row==0) == len(row):
+            row[row==0] = np.nan
+    return x
+
+def minimum(x: np.ndarray, d: 'float|int'):
+    x[x>d] = d
+    x = x.astype('float64')
+    x[np.isinf(x)] = np.nan
+    x = np.nan_to_num(x)
+    for row in x:
+        if np.count_nonzero(row==0) == len(row):
+            row[row==0] = np.nan
+    return x
+
+
+def log(x: np.array, d: float): #nan inf原值返回，但是遇到0会产生inf, 不能有负数
+    return np.log(abs(x)) / np.log(d)
+
+def sum_(x: np.ndarray, d: int):
+    mat = np.zeros((x.shape[0], x.shape[0]-d+1))
+    x = x.astype('float64')
+    x[np.isinf(x)] = np.nan
+    x = np.nan_to_num(x)
     for i in range(mat.shape[0]-d+1):
         mat[i:(i + d), i] = 1
-    res =  a.T @ mat
-    res = np.hstack((np.full((a.shape[1], d-1), fill_value=np.nan), res))
+    res =  x.T @ mat
+    res = np.hstack((np.full((x.shape[1], d-1), fill_value=np.nan), res))
+    for row in res:
+        if np.count_nonzero(row==0) == len(row):
+            row[row==0] = np.nan
     return res.T
 
 def mean(x: np.ndarray, d: int) -> np.ndarray:
     ma = np.zeros((x.shape[0], x.shape[0]-d+1))
+    x = x.astype('float64')
+    x[np.isinf(x)] = np.nan
+    x = np.nan_to_num(x)
     for i in range(ma.shape[0]-d+1):
         ma[i:(i + d), i] = 1/d
     res =  x.T @ ma
     res = np.hstack((np.full((x.shape[1], d-1), fill_value=np.nan), res))
+    for row in res:
+        if np.count_nonzero(row==0) == len(row):
+            row[row==0] = np.nan
+    return res.T
+
+def wma(x: np.ndarray, d: int) -> np.ndarray:
+    wma = np.zeros((x.shape[0], x.shape[0]-d+1))
+    x = x.astype('float64')
+    x[np.isinf(x)] = np.nan
+    x = np.nan_to_num(x)
+    denominator = np.sum([i for i in range(1, d+1)])
+    for i in range(wma.shape[0]-d+1):
+        for j in range(1, d+1):
+            wma[(i + j - 1):(i + j), i] = j / denominator
+    res =  x.T @ wma
+    res = np.hstack((np.full((x.shape[1], d-1), fill_value=np.nan), res))
+    for row in res:
+        if np.count_nonzero(row==0) == len(row):
+            row[row==0] = np.nan
     return res.T
 
 def ema(x: np.ndarray, d: int) -> np.ndarray:
     ema = np.zeros((x.shape[0], x.shape[0]-d+1))
-    denominator = np.sum([i for i in range(1, d+1)])
+    x = x.astype('float64')
+    x[np.isinf(x)] = np.nan
+    x = np.nan_to_num(x)
+    denominator = np.sum([math.exp(i) for i in range(1, d+1)])
     for i in range(ema.shape[0]-d+1):
         for j in range(1, d+1):
-            ema[(i + j - 1):(i + j), i] = j / denominator
+            ema[(i + j - 1):(i + j), i] = math.exp(j) / denominator
     res =  x.T @ ema
     res = np.hstack((np.full((x.shape[1], d-1), fill_value=np.nan), res))
+    for row in res:
+        if np.count_nonzero(row==0) == len(row):
+            row[row==0] = np.nan
     return res.T
 
 def var(x: np.ndarray, d: int) -> np.ndarray:
     res = np.full_like(x, fill_value=np.nan)
-    for row in range(x.shape[0] - d + 1):
-        v = x[row:row + d].var(axis=0)
+    x = x.astype('float64')
+    x[np.isinf(x)] = np.nan
+    x = np.nan_to_num(x)
+    begin = 0
+    for idx, row in enumerate(x):
+        if np.count_nonzero(row==0) == len(row):
+            continue
+        else:
+           begin = idx 
+           break
+    for row in range(begin, x.shape[0] - d + 1):
+        v = np.nanvar(x[row:row + d], axis=0)
         res[row + d - 1, :] = v
     return res
 
-def skew(x: np.ndarray, d: int) -> np.ndarray:
+def skew(x: np.ndarray, d: int) -> np.ndarray: # 可能会产生inf
     res = np.full_like(x, fill_value=np.nan)
-    for row in range(x.shape[0] - d + 1):
+    x = x.astype('float64')
+    x[np.isinf(x)] = np.nan
+    x = np.nan_to_num(x)
+    begin = 0
+    for idx, row in enumerate(x):
+        if np.count_nonzero(row==0) == len(row):
+            continue
+        else:
+           begin = idx 
+           break
+    for row in range(begin, x.shape[0] - d + 1):
         tmp = x[row:row + d]
-        s = ((tmp - tmp.mean(axis=0)) ** 3).mean(axis=0)
+        s = np.sum((tmp - np.nanmean(tmp, axis=0)) ** 3, axis=0) / \
+                (np.count_nonzero(~np.isnan(tmp), axis=0) * np.nanstd(tmp, axis=0) ** 3)
         res[row + d - 1, :] = s
     return res
 
 def kurt(x: np.ndarray, d: int) -> np.ndarray:
     res = np.full_like(x, fill_value=np.nan)
-    for row in range(x.shape[0] - d + 1):
+    x = x.astype('float64')
+    x[np.isinf(x)] = np.nan
+    x = np.nan_to_num(x)
+    begin = 0
+    for idx, row in enumerate(x):
+        if np.count_nonzero(row==0) == len(row):
+            continue
+        else:
+           begin = idx 
+           break
+    for row in range(begin, x.shape[0] - d + 1):
         tmp = x[row:row + d]
-        k = ((tmp - tmp.mean(axis=0)) ** 4).mean(axis=0) / (tmp.var(axis=0) ** 2)
+        k = kurtosis(tmp, axis=0)
         res[row + d - 1, :] = k
     return res
 
 def max_(x: np.array, d: int) -> np.ndarray:
     res = np.full_like(x, fill_value=np.nan)
-    for row in range(x.shape[0] - d + 1):
-        m = x[row:row + d].max(axis=0)
+    x = x.astype('float64')
+    x[np.isinf(x)] = np.nan
+    x = np.nan_to_num(x)
+    begin = 0
+    for idx, row in enumerate(x):
+        if np.count_nonzero(row==0) == len(row):
+            continue
+        else:
+           begin = idx 
+           break
+    for row in range(begin, x.shape[0] - d + 1):
+        m = np.nanmax(x[row:row + d], axis=0)
         res[row + d - 1, :] = m
     return res
 
 def min_(x: np.array, d: int) -> np.ndarray:
     res = np.full_like(x, fill_value=np.nan)
-    for row in range(x.shape[0] - d + 1):
-        m = x[row:row + d].min(axis=0)
+    x = x.astype('float64')
+    x[np.isinf(x)] = np.nan
+    x = np.nan_to_num(x)
+    begin = 0
+    for idx, row in enumerate(x):
+        if np.count_nonzero(row==0) == len(row):
+            continue
+        else:
+           begin = idx 
+           break
+    for row in range(begin, x.shape[0] - d + 1):
+        m = np.nanmin(x[row:row + d], axis=0)
         res[row + d - 1, :] = m
     return res
 
 def delta(x: np.array, d: int) -> np.ndarray:
     res = np.full_like(x, fill_value=np.nan)
-    for row in range(x.shape[0] - d + 1):
+    x = x.astype('float64')
+    x[np.isinf(x)] = np.nan
+    x = np.nan_to_num(x)
+    begin = 0
+    for idx, row in enumerate(x):
+        if np.count_nonzero(row==0) == len(row):
+            continue
+        else:
+           begin = idx 
+           break
+    for row in range(begin, x.shape[0] - d + 1):
         tmp = x[row:row + d]
         res[row + d - 1, :] = tmp[-1, :] - tmp[0, :]
     return res
 
 def delay(x: np.ndarray, d: int) -> np.ndarray:
+    x = x.astype('float64')
+    x[np.isinf(x)] = np.nan
+    x = np.nan_to_num(x)
     res = np.roll(x, d, axis=0)
     res[:d, :] = np.nan
+    for row in res:
+        if np.count_nonzero(row==0) == len(row):
+            row[:] = np.nan
     return res
 
 def rank(x: np.ndarray, d: int) -> np.ndarray:
     res = np.full_like(x, fill_value=np.nan)
-    for row in range(x.shape[0] - d + 1):
+    x = x.astype('float64')
+    x[np.isinf(x)] = np.nan
+    x = np.nan_to_num(x)
+    begin = 0
+    for idx, row in enumerate(x):
+        if np.count_nonzero(row==0) == len(row):
+            continue
+        else:
+           begin = idx 
+           break
+    for row in range(begin, x.shape[0] - d + 1):
         rank = x[row:row + d].argsort(axis=0).argsort(axis=0)
         res[row + d - 1, :] = rank[-1, :]
     return res
 
-def std(x: np.ndarray, d: int):
+def cs_rank(x: np.ndarray):
+    x = x.astype('float64')
+    x[np.isinf(x)] = np.nan
+    x = np.nan_to_num(x)
+    x = x.argsort(axis=1).argsort(axis=1)
+    for row in x:
+        if np.count_nonzero(row==0) == len(row):
+            row[row==0] = np.nan
+    return x
+
+def scale(x: np.ndarray, a: int = 1) -> np.ndarray:
+    x = x.astype('float64')
+    x[np.isinf(x)] = np.nan
+    x = np.nan_to_num(x)
+    s = np.sum(x, axis=1, keepdims=1)
+    x = (x/s) * a
+    return x
+
+def product(x: np.ndarray, d: int) -> np.ndarray:
     res = np.full_like(x, fill_value=np.nan)
-    for row in range(x.shape[0] - d + 1):
-        res[row + d - 1, :] = np.std(x[row:row + d], axis=0)
+    x = x.astype('float64')
+    x[np.isinf(x)] = np.nan
+    x = np.nan_to_num(x)
+    begin = 0
+    for idx, row in enumerate(x):
+        if np.count_nonzero(row==0) == len(row):
+            continue
+        else:
+           begin = idx 
+           break
+    for row in range(begin, x.shape[0] - d + 1):
+        tmp = x[row:row + d]
+        m = np.prod(tmp, axis=0)
+        res[row + d - 1, :] = m
     return res
 
-def decay_linear(x: np.ndarray, d:int):
-    raise NotImplementedError("Not Implemented")
-    ema = np.zeros([x.shape[0], x.shape[0]-d+1])
+def decay_linear(x: np.ndarray, d: int) -> np.ndarray:
+    res = np.full_like(x, fill_value=np.nan)
+    x = x.astype('float64')
+    x[np.isinf(x)] = np.nan
+    x = np.nan_to_num(x)
+    begin = 0
+    for idx, row in enumerate(x):
+        if np.count_nonzero(row==0) == len(row):
+            continue
+        else:
+           begin = idx 
+           break
+    for row in range(begin, x.shape[0] - d + 1):
+        tmp = x[row:row + d]
+        s = np.sum(tmp, axis=0)
+        res[row + d - 1, :] = x[row + d - 1, :] / s
+    return res
+
+def std(x: np.ndarray, d: int):
+    res = np.full_like(x, fill_value=np.nan)
+    x = x.astype('float64')
+    x[np.isinf(x)] = np.nan
+    x = np.nan_to_num(x)
+    begin = 0
+    for idx, row in enumerate(x):
+        if np.count_nonzero(row==0) == len(row):
+            continue
+        else:
+           begin = idx 
+           break
+    for row in range(begin, x.shape[0] - d + 1):
+        res[row + d - 1, :] = np.nanstd(x[row:row + d], axis=0)
+    return res
+
+def ts_norm(x: np.ndarray, d: int) -> np.ndarray: # 会产生inf nan
+    res = np.full_like(x, fill_value=np.nan)
+    x = x.astype('float64')
+    x[np.isinf(x)] = np.nan
+    x = np.nan_to_num(x)
+    begin = 0
+    for idx, row in enumerate(x):
+        if np.count_nonzero(row==0) == len(row):
+            continue
+        else:
+           begin = idx 
+           break
+    for row in range(begin, x.shape[0] - d + 1):
+        ts_mean = np.nanmean(x[row:row+d], axis=0)
+        ts_std = np.nanstd(x[row:row+d], axis=0)
+        res[row + d - 1, :] = (x[row + d - 1] - ts_mean) / ts_std
+    return res
+
+def if_else(x: np.ndarray, a: 'np.ndarray|int|float', cond: str, y: 'np.ndarray|int|float', z: 'np.ndarray|int|float'):
+    if isinstance(a, (int, float)) and isinstance(y, np.ndarray):
+        mask = eval(f'x {cond} a')
+        res = np.where(mask, y, z)
+        return res
+    if isinstance(a, (int, float)) and isinstance(y, (int, float)) and isinstance(z, np.ndarray):
+        y = np.full_like(x, y)
+        mask = eval(f'x {cond} a')
+        res = np.where(mask, y, z)
+        return res
+    if isinstance(a, np.ndarray) and isinstance(y, np.ndarray) and isinstance(z, (int, float)):
+        z = np.full_like(x, z)
+        mask = eval(f'x {cond} a')
+        res = np.where(mask, y, z)
+        return res
+
+def cs_norm(x: np.ndarray) -> np.ndarray:
+    res = np.full_like(x, fill_value=np.nan)
+    x = x.astype('float64')
+    x[np.isinf(x)] = np.nan
+    x = np.nan_to_num(x)
+    begin = 0
+    for idx, row in enumerate(x):
+        if np.count_nonzero(row==0) == len(row):
+            continue
+        else:
+           begin = idx 
+           break
+    for row in range(begin, x.shape[0]):
+        cs_mean = np.nanmean(x[row, :])
+        cs_std = np.nanstd(x[row, :])
+        res[row, :] = (x[row, :] - cs_mean) / cs_std
+    return res
 
 def correlation(x: np.ndarray, y: np.ndarray, d: int):
-    raise NotImplementedError("Not Implemented")
+    x = x.astype(np.float64); y = y.astype(np.float64)
     res = np.full_like(x, fill_value=np.nan)
     for row in range(x.shape[0] - d + 1):
         x_demean = np.nan_to_num(x - np.nanmean(x[row:row + d], axis=0).repeat(x.shape[0]).reshape(x.shape[1], x.shape[0]).T)
@@ -161,13 +414,13 @@ def correlation(x: np.ndarray, y: np.ndarray, d: int):
     return res
 
 def covariance(x: np.ndarray,y: np.ndarray,d: int):
-    raise NotImplementedError("Not Implemented")
     res = np.full_like(x, fill_value=np.nan)
     for row in range(x.shape[0] - d + 1):
         x_demean = np.nan_to_num(x - np.nanmean(x[row:row + d], axis=0).repeat(x.shape[0]).reshape(x.shape[1], x.shape[0]).T)
         y_demean = np.nan_to_num(y - np.nanmean(y[row:row + d], axis=0).repeat(x.shape[0]).reshape(x.shape[1], x.shape[0]).T)
         res[row + d - 1, :] = (x_demean.T @ y_demean).diagonal() / (d - 1)
     return res
+
 
 if __name__ == '__main__':
     np.random.seed(0)
